@@ -325,7 +325,7 @@
 
       // Random start offset (first half of file) + slight pitch variation
       const offset = Math.random() * (sawBuffer.duration * 0.5);
-      const rate   = 0.92 + Math.random() * 0.16;   // 0.92–1.08×
+      const rate   = 0.72 + Math.random() * 0.16;   // 0.92–1.08×
       const source = ac.createBufferSource();
       source.buffer = sawBuffer;
       source.loop   = true;
