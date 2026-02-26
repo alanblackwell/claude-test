@@ -325,70 +325,89 @@
 
       const master = ac.createGain();
       master.gain.setValueAtTime(0, now);
-      master.gain.linearRampToValueAtTime(0.25, now + 0.06);
+      master.gain.linearRampToValueAtTime(0.3, now + 0.08);
       master.connect(ac.destination);
 
-      // Engine: low sawtooth → hard clip → lowpass
-      const eng      = ac.createOscillator();
-      eng.type             = 'sawtooth';
-      eng.frequency.value  = 100;
-      const engShape = ac.createWaveShaper();
-      engShape.curve       = makeDistCurve(8);
-      engShape.oversample  = '4x';
-      const engLP    = ac.createBiquadFilter();
-      engLP.type           = 'lowpass';
-      engLP.frequency.value = 500;
-      const engGain  = ac.createGain();
-      engGain.gain.value   = 0.55;
-      eng.connect(engShape); engShape.connect(engLP); engLP.connect(engGain); engGain.connect(master);
+      // Engine 1: 65 Hz sawtooth → very heavy clip → lowpass 350 Hz
+      const eng1      = ac.createOscillator();
+      eng1.type             = 'sawtooth';
+      eng1.frequency.value  = 65;
+      const eng1Shape = ac.createWaveShaper();
+      eng1Shape.curve       = makeDistCurve(12);
+      eng1Shape.oversample  = '4x';
+      const eng1LP    = ac.createBiquadFilter();
+      eng1LP.type           = 'lowpass';
+      eng1LP.frequency.value = 350;
+      const eng1Gain  = ac.createGain();
+      eng1Gain.gain.value   = 0.6;
+      eng1.connect(eng1Shape); eng1Shape.connect(eng1LP); eng1LP.connect(eng1Gain); eng1Gain.connect(master);
 
-      // LFO: slight pitch wobble on engine (3 Hz, ±6 Hz)
+      // Engine 2: slightly detuned copy for thickness and beating
+      const eng2      = ac.createOscillator();
+      eng2.type             = 'sawtooth';
+      eng2.frequency.value  = 65;
+      eng2.detune.value     = 14;
+      const eng2Shape = ac.createWaveShaper();
+      eng2Shape.curve       = makeDistCurve(12);
+      eng2Shape.oversample  = '4x';
+      const eng2LP    = ac.createBiquadFilter();
+      eng2LP.type           = 'lowpass';
+      eng2LP.frequency.value = 350;
+      const eng2Gain  = ac.createGain();
+      eng2Gain.gain.value   = 0.45;
+      eng2.connect(eng2Shape); eng2Shape.connect(eng2LP); eng2LP.connect(eng2Gain); eng2Gain.connect(master);
+
+      // LFO: slow pitch wobble on both engines (2 Hz, ±4 Hz)
       const lfo  = ac.createOscillator();
-      lfo.frequency.value  = 3;
+      lfo.frequency.value  = 2;
       const lfoG = ac.createGain();
-      lfoG.gain.value      = 6;
-      lfo.connect(lfoG); lfoG.connect(eng.frequency);
+      lfoG.gain.value      = 4;
+      lfo.connect(lfoG); lfoG.connect(eng1.frequency); lfoG.connect(eng2.frequency);
 
-      // Blade buzz: higher sawtooth → moderate clip → bandpass
-      const blade      = ac.createOscillator();
-      blade.type             = 'sawtooth';
-      blade.frequency.value  = 200;
-      blade.detune.value     = 9;
-      const bladeShape = ac.createWaveShaper();
-      bladeShape.curve       = makeDistCurve(4);
-      bladeShape.oversample  = '4x';
-      const bladeBP    = ac.createBiquadFilter();
-      bladeBP.type           = 'bandpass';
-      bladeBP.frequency.value = 1100;
-      bladeBP.Q.value        = 0.7;
-      const bladeGain  = ac.createGain();
-      bladeGain.gain.value   = 0.9;
-      blade.connect(bladeShape); bladeShape.connect(bladeBP); bladeBP.connect(bladeGain); bladeGain.connect(master);
-
-      // Grinding noise: white noise → highpass → lowpass
+      // Low rumble noise: white noise → lowpass 280 Hz only
       const noise    = makeNoiseSrc(ac);
-      const noiseHP  = ac.createBiquadFilter();
-      noiseHP.type          = 'highpass';
-      noiseHP.frequency.value = 700;
       const noiseLP  = ac.createBiquadFilter();
       noiseLP.type          = 'lowpass';
-      noiseLP.frequency.value = 4500;
+      noiseLP.frequency.value = 280;
       const noiseGain = ac.createGain();
-      noiseGain.gain.value  = 0.35;
-      noise.connect(noiseHP); noiseHP.connect(noiseLP); noiseLP.connect(noiseGain); noiseGain.connect(master);
+      noiseGain.gain.value  = 0.18;
+      noise.connect(noiseLP); noiseLP.connect(noiseGain); noiseGain.connect(master);
 
-      eng.start(); lfo.start(); blade.start(); noise.start();
-      sawNodes = { master, eng, lfo, blade, noise };
+      eng1.start(); eng2.start(); lfo.start(); noise.start();
+      sawNodes = { master, eng1, eng2, lfo, noise, coughTimer: null };
+
+      // Irregular engine coughs: brief pitch stumble + volume dip
+      function scheduleCough() {
+        sawNodes.coughTimer = setTimeout(() => {
+          if (!sawNodes) return;
+          const n = audioCtx.currentTime;
+          eng1.frequency.cancelScheduledValues(n);
+          eng2.frequency.cancelScheduledValues(n);
+          eng1.frequency.setValueAtTime(65, n);
+          eng1.frequency.linearRampToValueAtTime(40, n + 0.08);
+          eng1.frequency.linearRampToValueAtTime(65, n + 0.30);
+          eng2.frequency.setValueAtTime(65, n);
+          eng2.frequency.linearRampToValueAtTime(40, n + 0.08);
+          eng2.frequency.linearRampToValueAtTime(65, n + 0.30);
+          master.gain.cancelScheduledValues(n);
+          master.gain.setValueAtTime(0.3, n);
+          master.gain.linearRampToValueAtTime(0.08, n + 0.07);
+          master.gain.linearRampToValueAtTime(0.3, n + 0.30);
+          scheduleCough();
+        }, 1800 + Math.random() * 2800);
+      }
+      scheduleCough();
     }
 
     function stopSaw() {
       if (!sawNodes) return;
-      const { master, eng, lfo, blade, noise } = sawNodes;
+      const { master, eng1, eng2, lfo, noise, coughTimer } = sawNodes;
+      clearTimeout(coughTimer);
       const now = audioCtx.currentTime;
       master.gain.setValueAtTime(master.gain.value, now);
       master.gain.linearRampToValueAtTime(0, now + 0.12);
       setTimeout(() => {
-        try { eng.stop(); lfo.stop(); blade.stop(); noise.stop(); master.disconnect(); } catch(e) {}
+        try { eng1.stop(); eng2.stop(); lfo.stop(); noise.stop(); master.disconnect(); } catch(e) {}
       }, 200);
       sawNodes = null;
     }
