@@ -44,6 +44,18 @@
       '#ff9f43','#6c5ce7','#fdcb6e','#55efc4'
     ];
 
+    // Background image
+    const bg = new Image();
+    bg.src = 'source.png';
+
+    function drawBg() {
+      if (!bg.complete || !bg.naturalWidth) return;
+      const scale = Math.max(W / bg.naturalWidth, H / bg.naturalHeight);
+      const bw = bg.naturalWidth  * scale;
+      const bh = bg.naturalHeight * scale;
+      ctx.drawImage(bg, (W - bw) / 2, (H - bh) / 2, bw, bh);
+    }
+
     const particles = [];
 
     class Particle {
@@ -96,8 +108,9 @@
     }, { passive: false });
 
     function loop() {
-      // Semi-transparent fill creates motion-trail fade effect
-      ctx.fillStyle = 'rgba(8, 8, 15, 0.18)';
+      // Draw background image, then dark overlay for particle trail effect
+      drawBg();
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.35)';
       ctx.fillRect(0, 0, W, H);
 
       for (let i = particles.length - 1; i >= 0; i--) {
